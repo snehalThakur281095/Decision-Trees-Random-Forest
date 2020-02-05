@@ -1,0 +1,152 @@
+---
+title: "Assign2-572"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r}
+#QUESTION 5
+
+GermanCredit <- read.csv("C:/Users/Snehal Thakur/Desktop/IDS 572/Assignment 2/GermanCredit.csv")
+View(GermanCredit)
+attach(GermanCredit)
+library(knitr)
+library(reshape2)
+library(RColorBrewer)
+library(ggplot2)
+library(boot)
+```
+```{r}
+#(A) 
+
+#Proportions of Good Credit rating vs Bad Credit rating
+propOfGoodBad<-prop.table(table(RESPONSE))
+View(propOfGoodBad)
+#HOW TO DISPLAY THE ABOVE TABLE
+#Proportion of No(0)=0.7 and Yes(1)=0.3
+GermanCredit$RESPONSE <- as.factor(GermanCredit$RESPONSE)
+#Descriptions of the predictor variables
+summary(GermanCredit)
+```
+```{r}
+GermanCredit_New<-GermanCredit[,-1]
+library(psych)
+describe(GermanCredit_New)
+```
+
+```{r}
+ggplot(GermanCredit, aes(factor(INSTALL_RATE), ..count..)) + 
+  geom_bar(aes(fill = RESPONSE), position = "dodge") + xlab("Installment Rates")
+```
+```{r}
+#By plotting the above graph, for the installment rate variable,  we see that the median value for a good credit rated records are approximately two times the median value for bad credit rated records.
+```
+
+```{r}
+ggplot(GermanCredit, aes(CHK_ACCT, ..count..)) + 
+  geom_bar(aes( fill = RESPONSE), position = "dodge",show.legend = TRUE)
+```
+```{r}
+#From the above graph, for variable checking account(categorical), we observe that the count for good credit rating is highest for records which are classified as 'no checking account'. Moreover the lowest coutn for good credit as well as bad credit is housed by categor '2' (i.e. 2 : => 200 DM)
+```
+
+```{r}
+ggplot(GermanCredit, aes(EMPLOYMENT, ..count..)) + 
+  geom_bar(aes(fill = RESPONSE), position = "dodge")
+```
+
+```{r}
+#From the above graph, plotted for variable 'Employment', we can see that the proportion of good credit rating to bad credit rating is quiet high as the person satrts to have more years of employment.
+```
+
+```{r}
+#(B)
+str(GermanCredit)
+GermanCredit$OBS.<-NULL
+#Splitting data into test and train data
+set.seed(1234)
+indx<-sample(2, nrow(GermanCredit), replace= T, prob= c(0.6,0.4))
+train<- GermanCredit[indx ==1,]
+test<- GermanCredit[indx ==2,]
+attach(GermanCredit)
+```
+```{r}
+#------------------------------ Decision tree-----------------------------#
+#Contruct decision tree model using rpart
+library(rpart)
+dt_rpart_GermanCredit = rpart(RESPONSE~., data = train, method = "class", control = rpart.control(minsplit = 50, cp = 0.0001))
+#summary(dt_rpart_GermanCredit)
+print(dt_rpart_GermanCredit)
+```
+```{r}
+#Get the accuracy of train data
+predTrn=predict(dt_rpart_GermanCredit,train, type='class')
+table(pred = predTrn, true=train$RESPONSE)
+mean(predTrn == train$RESPONSE)
+```
+```{r}
+#Get the accuracy of test data
+table(pred = predict(dt_rpart_GermanCredit,test, type='class'), true=test$RESPONSE)
+
+mean(predict(dt_rpart_GermanCredit,test, type='class') ==test$RESPONSE)
+
+# "minsplit" is kept as 30. This is because when we keep it as 10, the accuracy decreases. Also. "cp" value is kept as 0.0001 for Complexity Parameter so that the accuracy is high and cost of adding another variable is approximated.
+
+#Note that accuracy for test data is 70.44% in Decision tree.
+```
+```{r}
+#for finding good applicants
+printcp(dt_rpart_GermanCredit)
+#printcp command gives us the nodes which contribute highest towards the classification problem of "Good" applicants.
+#Hence, from the below output, the variables  AMOUNT, CHK_ACCT, DURATION, HISTORY are some of the top  best nodes for the same.
+#------------------------------Decision tree ended------------------------#
+```
+```{r}
+#------------------------------ Random forest-----------------------------#
+#loading library random forest
+library(randomForest)
+rf_GermanCredit<-randomForest(RESPONSE~.,data=train, ntree=200,proximity=1,importance=T)
+rf_GermanCredit
+```
+```{r}
+#plot
+plot(rf_GermanCredit)
+legend("top", legend = colnames(rf_GermanCredit$err.rate), cex = 0.5, lty = c(1,2,3), col = c(1,2,3), horiz = T)
+```
+```{r}
+library(caret)
+#Caluclating prediction power of the training as well as test data
+prediction_train<-predict(rf_GermanCredit,newdata = train)
+confusionMatrix(prediction_train,train$RESPONSE)
+```
+```{r}
+prediction <-predict(rf_GermanCredit, newdata=test)
+confusionMatrix(prediction, test$RESPONSE)
+#Note that the accuracy for test data is 74.88% in Random Forest.
+```
+
+```{r}
+#importance of each variable
+importance(rf_GermanCredit, type = 2)
+#According to Random forest the important nodes are listed as follows (in the output)
+```
+```{r}
+#(C) Among Decision tree and Random Forest tree, according to accuracy rate, we belive Random forest to be a better model than Decision tree as it has higher accuracy while predicting for test data. As highlighted above, we see that the Accuracy of TEST DATA for Decision tree was 70.44%(approx.) and for Random Forest it was 74.88%(approx.)
+
+#ROC curve
+library(ROCR)
+score<-rf_GermanCredit$votes[,2]
+pred<-prediction(score, RESPONSE)
+aucPerf <-performance(pred, "tpr", "fpr")
+plot(aucPerf,col="red", lty = 3, lwd =3)
+
+#From the ROC curve we can see that if the cutoff point is between 0.6-0.7 the performance of our model can be improved as it should be nearest to upper left corner. (The point nearest to upper left corner of the graph lies somewhere between 0.6-0.7)
+```
+```{r}
+#(E)
+#We see that the accuracy provided by Random forest on training as well as test data was much higher when compared to Decision tree's accuracy for the two data.
+#The variables which contribute for best classifying a "Good" candidate are CHK_ACCT, AMOUNT and HISTORY. (When aggregated for Decision tree, based on cp value, as well as Random Forest, using 'importance'.)
+```
+
